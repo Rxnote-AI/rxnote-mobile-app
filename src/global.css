@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * RxScribe Mobile design tokens (light-only). Source of truth: src/theme/rx.ts.
+ * Both :root and .dark carry the same warm palette so the app always renders the
+ * imported design regardless of the device color scheme.
+ */
+@layer base {
+  :root,
+  .dark {
+    --background: 40 12% 96%; /* #F6F5F3 */
+    --foreground: 220 4% 9%; /* #17181A */
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 220 4% 9%;
+    --primary: 2 78% 55%; /* #E5322D */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 44 14% 94%; /* #F2F1ED */
+    --secondary-foreground: 220 4% 9%;
+    --muted: 44 14% 94%;
+    --muted-foreground: 222 5% 56%; /* #8A8D94 */
+    --accent: 2 78% 55%;
+    --accent-foreground: 0 0% 100%;
+    --border: 44 14% 92%; /* #ECEBE7 */
+    --input: 44 12% 89%; /* #E4E3DF */
+    --ring: 2 78% 55%;
+  }
+}
