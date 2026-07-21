@@ -1,7 +1,7 @@
 import { useSignUp, useSSO } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import * as AuthSession from 'expo-auth-session';
-import { Link, useRouter } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
 import { KeyboardAvoidingView, Pressable, ScrollView, View } from 'react-native';
@@ -21,6 +21,14 @@ export default function SignUpScreen() {
   const { startSSOFlow } = useSSO();
   const { signUp, setActive, isLoaded } = useSignUp();
 
+  // Persona chosen on /(auth)/choose-role. Stamped into Clerk `unsafeMetadata`
+  // at creation so the post-auth gate (src/app/index.tsx → use-role.ts) routes
+  // to the right tab group. The server promotes it to `publicMetadata` — the
+  // authoritative flag — when the patient account is bootstrapped.
+  const { role } = useLocalSearchParams<{ role?: string }>();
+  const isPatient = role === 'patient';
+  const signUpMetadata = isPatient ? { role: 'patient' as const } : undefined;
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -37,6 +45,7 @@ export default function SignUpScreen() {
       const { createdSessionId, setActive: activate } = await startSSOFlow({
         strategy: 'oauth_google',
         redirectUrl: AuthSession.makeRedirectUri({ scheme: 'rxnote', path: 'sso-callback' }),
+        unsafeMetadata: signUpMetadata,
       });
       if (createdSessionId && activate) {
         await activate({ session: createdSessionId });
@@ -47,7 +56,7 @@ export default function SignUpScreen() {
     } finally {
       setBusy(false);
     }
-  }, [startSSOFlow, router]);
+  }, [startSSOFlow, router, signUpMetadata]);
 
   const onSubmit = useCallback(async () => {
     if (!isLoaded) return;
@@ -59,6 +68,7 @@ export default function SignUpScreen() {
         lastName: lastName.trim(),
         emailAddress: email.trim(),
         password,
+        unsafeMetadata: signUpMetadata,
       });
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
       setPendingVerification(true);
@@ -67,7 +77,7 @@ export default function SignUpScreen() {
     } finally {
       setBusy(false);
     }
-  }, [isLoaded, signUp, firstName, lastName, email, password]);
+  }, [isLoaded, signUp, firstName, lastName, email, password, signUpMetadata]);
 
   const onVerify = useCallback(async () => {
     if (!isLoaded) return;
@@ -140,7 +150,9 @@ export default function SignUpScreen() {
                   Create your account
                 </Text>
                 <Text weight="medium" className="mt-1 text-[14px] text-rx-muted">
-                  Join RxNote and start documenting faster
+                  {isPatient
+                    ? 'Keep your health records in one place'
+                    : 'Join RxNote and start documenting faster'}
                 </Text>
               </View>
 
@@ -190,7 +202,7 @@ export default function SignUpScreen() {
                 label="EMAIL"
                 value={email}
                 onChangeText={setEmail}
-                placeholder="you@clinic.com"
+                placeholder={isPatient ? 'you@email.com' : 'you@clinic.com'}
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoComplete="email"

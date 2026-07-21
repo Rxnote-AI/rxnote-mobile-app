@@ -22,6 +22,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { env } from '@/lib/env';
 import { queryClient } from '@/lib/query-client';
+import { ToastProvider } from '@/components/ui/toast';
 import { rx } from '@/theme/rx';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -54,6 +55,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <SafeAreaProvider>
+            <ToastProvider>
             <Stack
               screenOptions={{
                 headerShown: false,
@@ -65,7 +67,18 @@ export default function RootLayout() {
               <Stack.Screen name="new-scribe" />
               <Stack.Screen name="scribe-session" />
               <Stack.Screen name="note" />
+              <Stack.Screen name="patient/record-session" />
+              <Stack.Screen name="patient/visit/[id]" />
+              <Stack.Screen name="patient/profiles" />
+              <Stack.Screen name="patient/profiles/new" />
+              <Stack.Screen name="patient/appointment/new" />
+              <Stack.Screen name="patient/appointment/[id]" />
+              <Stack.Screen name="patient/document/[id]" />
+              <Stack.Screen name="patient/profiles/relation" />
+              <Stack.Screen name="patient/visit-added" />
+              <Stack.Screen name="patient/provider/new" />
             </Stack>
+            </ToastProvider>
             <StatusBar style="dark" />
           </SafeAreaProvider>
         </GestureHandlerRootView>

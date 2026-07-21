@@ -1,23 +1,56 @@
 import { useUser } from '@clerk/clerk-expo';
 
-export type AppRole = 'clinician' | 'patient';
+import { useActivePersonaStore, type Persona } from '@/features/persona/use-active-persona';
+
+export type AppRole = Persona;
 
 /**
- * Resolves the app persona.
+ * Resolves which app persona to show.
  *
- * In the existing product, every user is a clinician — roles are Clerk **org roles**
- * (`org:doctor`, `org:nurse`, `org:admin`, …); there is no "patient" role. "Patient" is a
- * NEW mobile-only persona, so we default to `clinician` and only treat an account as a
- * patient when it is explicitly flagged via metadata (`role: 'patient'`). When patient
- * sign-up is built, stamp that flag (or use a separate Clerk instance).
+ * A single login can be BOTH a clinician and a patient (like Airbnb's
+ * host/traveller switch) — clinician data hangs off `users.id`, patient data off
+ * `patient_accounts.id`, and the two never overlap. So the persona is a *view*
+ * choice, not an identity:
+ *
+ *   1. An explicit in-app switch wins (persisted in SecureStore).
+ *   2. Otherwise fall back to the Clerk metadata role stamped at sign-up.
+ *   3. Otherwise clinician — every pre-existing user is one.
+ *
+ * `publicMetadata` is backend-only and therefore the trustworthy flag;
+ * `unsafeMetadata` is client-writable and read only as a first-launch hint
+ * before the server has confirmed the patient account.
+ *
+ * NOTE: this is a UI router only, never access control. Data access is enforced
+ * server-side — patient routes resolve via `patient_accounts.clerk_user_id`,
+ * clinician routes via `getOrgScopedUser()` — so a forged client role leaks nothing.
  */
-export function useRole(): { role: AppRole | null; isLoaded: boolean } {
+export function useRole(): {
+  role: AppRole | null;
+  isLoaded: boolean;
+  /** True when the account has a patient side, so the switcher can be offered. */
+  hasPatientAccount: boolean;
+  setPersona: (persona: Persona) => void;
+} {
   const { user, isLoaded } = useUser();
-  if (!isLoaded) return { role: null, isLoaded: false };
+  const persona = useActivePersonaStore((s) => s.persona);
+  const hydrated = useActivePersonaStore((s) => s.hydrated);
+  const setPersona = useActivePersonaStore((s) => s.setPersona);
 
-  const flag = (user?.publicMetadata?.role ?? user?.unsafeMetadata?.role) as
-    | string
-    | undefined;
-  const role: AppRole = flag === 'patient' ? 'patient' : 'clinician';
-  return { role, isLoaded: true };
+  const publicMeta = user?.publicMetadata as { role?: string; hasPatientAccount?: boolean } | undefined;
+  const unsafeMeta = user?.unsafeMetadata as { role?: string } | undefined;
+  const hasPatientAccount = publicMeta?.hasPatientAccount === true || publicMeta?.role === 'patient';
+
+  if (!isLoaded || !hydrated) {
+    return { role: null, isLoaded: false, hasPatientAccount, setPersona };
+  }
+
+  const metadataRole: AppRole =
+    publicMeta?.role === 'patient' || unsafeMeta?.role === 'patient' ? 'patient' : 'clinician';
+
+  return {
+    role: persona ?? metadataRole,
+    isLoaded: true,
+    hasPatientAccount,
+    setPersona,
+  };
 }

@@ -7,6 +7,8 @@ import { Text } from '@/components/ui/text';
 import { rx } from '@/theme/rx';
 
 interface Props {
+  /** Composer prompt. Defaults to clinician copy; the patient app passes its own. */
+  placeholder?: string;
   value: string;
   onChangeText: (text: string) => void;
   onSend: () => void;
@@ -57,6 +59,7 @@ export function ChatComposer({
   onRemoveAttachment,
   streaming,
   bottomPad,
+  placeholder = 'Ask about a patient…',
 }: Props) {
   const canSend = value.trim().length > 0 || attachments.length > 0;
 
@@ -79,7 +82,7 @@ export function ChatComposer({
         <TextInput
           value={value}
           onChangeText={onChangeText}
-          placeholder="Ask about a patient…"
+          placeholder={placeholder}
           placeholderTextColor="#B7B7B2"
           multiline
           className="px-1.5 text-[15px] leading-[21px] text-rx-ink"

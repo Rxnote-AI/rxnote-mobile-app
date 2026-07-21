@@ -3,8 +3,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useRouter } from 'expo-router';
+
 import { Avatar, initialsOf } from '@/components/ui/avatar';
 import { Text } from '@/components/ui/text';
+import { useRole } from '@/hooks/use-role';
 import { rx } from '@/theme/rx';
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -28,6 +31,8 @@ function SectionLabel({ children }: { children: string }) {
 
 export default function SettingsScreen() {
   const { signOut } = useAuth();
+  const router = useRouter();
+  const { setPersona, hasPatientAccount } = useRole();
   const { user } = useUser();
 
   const name = user?.fullName || (user?.firstName ? `Dr. ${user.firstName}` : 'Clinician');
@@ -61,6 +66,35 @@ export default function SettingsScreen() {
           </View>
           <Ionicons name="chevron-forward" size={16} color={rx.faint} />
         </Pressable>
+
+        {/* Persona switch — only shown when this same login actually owns BOTH
+            sides (publicMetadata.hasPatientAccount is set by the server when the
+            patient account is created). A clinician with no patient account sees
+            nothing here, rather than a switch into an empty app. */}
+        {hasPatientAccount ? (
+        <View className="mb-[22px] overflow-hidden rounded-[18px] border border-rx-line bg-rx-surface">
+          <Pressable
+            onPress={() => {
+              setPersona('patient');
+              router.replace('/(patient)');
+            }}
+            className="flex-row items-center gap-[13px] px-4 py-[15px] active:bg-rx-hairline/60"
+          >
+            <View className="h-8 w-8 items-center justify-center rounded-[10px] bg-rx-accent-tint">
+              <Ionicons name="swap-horizontal" size={16} color={rx.accent} />
+            </View>
+            <View className="flex-1">
+              <Text weight="semibold" className="text-[14.5px] text-rx-ink">
+                Switch to my health
+              </Text>
+              <Text weight="medium" className="text-[12px] text-rx-muted">
+                Your own records, visits and documents
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={13} color={rx.faint} />
+          </Pressable>
+        </View>
+        ) : null}
 
         {/* Clinical */}
         <SectionLabel>CLINICAL</SectionLabel>

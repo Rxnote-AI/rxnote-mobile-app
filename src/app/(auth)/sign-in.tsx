@@ -34,6 +34,9 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Set when Clerk asks for an emailed code instead of accepting the password. */
+  const [pendingCode, setPendingCode] = useState(false);
+  const [code, setCode] = useState('');
 
   const onGoogle = useCallback(async () => {
     setBusy('google');
@@ -62,18 +65,66 @@ export default function SignInScreen() {
     setError(null);
     try {
       const attempt = await signIn.create({ identifier: email, password });
+
       if (attempt.status === 'complete') {
         await setActive({ session: attempt.createdSessionId });
         router.replace('/');
-      } else {
-        setError('Additional verification is required to sign in.');
+        return;
       }
+
+      // Password didn't finish the sign-in. The usual cause on a Clerk instance
+      // with password auth disabled is `needs_first_factor` offering email_code —
+      // so fall back to emailing a code rather than dead-ending the user.
+      if (attempt.status === 'needs_first_factor') {
+        const emailFactor = attempt.supportedFirstFactors?.find(
+          (f): f is typeof f & { emailAddressId: string } => f.strategy === 'email_code',
+        );
+        if (emailFactor) {
+          await signIn.prepareFirstFactor({
+            strategy: 'email_code',
+            emailAddressId: emailFactor.emailAddressId,
+          });
+          setPendingCode(true);
+          return;
+        }
+        const offered = attempt.supportedFirstFactors?.map((f) => f.strategy).join(', ') || 'none';
+        setError(`This account needs a different sign-in method (available: ${offered}).`);
+        return;
+      }
+
+      if (attempt.status === 'needs_second_factor') {
+        setError('Two-factor authentication is on for this account. Sign in on the web to continue.');
+        return;
+      }
+
+      // Surface the real status instead of a generic catch-all.
+      setError(`Sign-in could not complete (status: ${attempt.status}).`);
     } catch (e: unknown) {
       setError(readClerkError(e, 'Sign-in failed. Check your credentials.'));
     } finally {
       setBusy(null);
     }
   }, [isLoaded, signIn, email, password, setActive, router]);
+
+  /** Completes an email_code first-factor sign-in. */
+  const onVerifyCode = useCallback(async () => {
+    if (!isLoaded) return;
+    setBusy('email');
+    setError(null);
+    try {
+      const attempt = await signIn.attemptFirstFactor({ strategy: 'email_code', code: code.trim() });
+      if (attempt.status === 'complete') {
+        await setActive({ session: attempt.createdSessionId });
+        router.replace('/');
+      } else {
+        setError(`Could not complete sign-in (status: ${attempt.status}).`);
+      }
+    } catch (e: unknown) {
+      setError(readClerkError(e, 'That code did not work.'));
+    } finally {
+      setBusy(null);
+    }
+  }, [isLoaded, signIn, code, setActive, router]);
 
   return (
     <SafeAreaView className="flex-1 bg-rx-bg">
@@ -106,23 +157,41 @@ export default function SignInScreen() {
 
           <Divider />
 
-          <AuthField
-            label="EMAIL"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@clinic.com"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            autoComplete="email"
-          />
-          <AuthField
-            label="PASSWORD"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            secureTextEntry
-            autoComplete="password"
-          />
+          {pendingCode ? (
+            <>
+              <Text weight="medium" className="mb-4 text-[13.5px] leading-5 text-rx-muted">
+                We emailed a 6-digit code to {email}. Enter it to finish signing in.
+              </Text>
+              <AuthField
+                label="VERIFICATION CODE"
+                value={code}
+                onChangeText={setCode}
+                placeholder="123456"
+                keyboardType="number-pad"
+                autoComplete="one-time-code"
+              />
+            </>
+          ) : (
+            <>
+              <AuthField
+                label="EMAIL"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@clinic.com"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                autoComplete="email"
+              />
+              <AuthField
+                label="PASSWORD"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                secureTextEntry
+                autoComplete="password"
+              />
+            </>
+          )}
 
           {error ? (
             <Text weight="medium" className="mb-2 text-[13px] text-rx-accent">
@@ -132,16 +201,39 @@ export default function SignInScreen() {
 
           <AccentButton
             className="mt-2 rounded-[16px]"
-            label={busy === 'email' ? 'Signing in…' : 'Sign in'}
-            disabled={busy !== null}
-            onPress={onEmail}
+            label={
+              busy === 'email'
+                ? pendingCode
+                  ? 'Verifying…'
+                  : 'Signing in…'
+                : pendingCode
+                  ? 'Verify & continue'
+                  : 'Sign in'
+            }
+            disabled={busy !== null || (pendingCode && code.trim().length < 4)}
+            onPress={pendingCode ? onVerifyCode : onEmail}
           />
+
+          {pendingCode ? (
+            <Pressable
+              onPress={() => {
+                setPendingCode(false);
+                setCode('');
+                setError(null);
+              }}
+              className="mt-3 items-center active:opacity-70"
+            >
+              <Text weight="bold" className="text-[13px] text-rx-muted">
+                Use a different account
+              </Text>
+            </Pressable>
+          ) : null}
 
           <View className="mt-6 flex-row items-center justify-center gap-1.5">
             <Text weight="medium" className="text-[13.5px] text-rx-muted">
               Don&apos;t have an account?
             </Text>
-            <Link href="/(auth)/sign-up" asChild>
+            <Link href="/(auth)/choose-role" asChild>
               <Pressable>
                 <Text weight="bold" className="text-[13.5px] text-rx-accent">
                   Sign up

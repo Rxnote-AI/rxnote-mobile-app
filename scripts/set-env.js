@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 /**
- * Switch apps/mobile/.env between the production (rxnote.ai) and local backends.
+ * Switch .env between the production (rxnote.ai) and local backends.
  *
  *   node ./scripts/set-env.js prod    # point the app at https://rxnote.ai
  *   node ./scripts/set-env.js local   # point the app at http://localhost:3000
+ *   node ./scripts/set-env.js lan     # point the app at http://<this-mac-lan-ip>:3000
+ *
+ * `local` only works where the device shares the Mac's loopback: an emulator, or a
+ * USB device with `adb reverse tcp:3000 tcp:3000` active. That reverse mapping drops
+ * whenever USB re-enumerates, which shows up as "localhost not working" — use `lan`
+ * on a physical device instead (same Wi-Fi, no adb needed).
  *
  * EXPO_PUBLIC_* values are inlined into the JS bundle when Metro bundles, so after
  * switching you must (re)start Metro / rebuild for the change to take effect. The npm
@@ -12,7 +18,20 @@
  * The Clerk publishable key is a PUBLIC key (safe to embed). `.env` is gitignored.
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+
+/** First non-internal IPv4 address — what a phone on the same Wi-Fi can reach. */
+function lanAddress() {
+  for (const iface of Object.values(os.networkInterfaces())) {
+    for (const net of iface ?? []) {
+      if (net.family === 'IPv4' && !net.internal) return net.address;
+    }
+  }
+  return null;
+}
+
+const TEST_CLERK_KEY = 'pk_test_YXdhaXRlZC1qZW5uZXQtOC5jbGVyay5hY2NvdW50cy5kZXYk';
 
 const ENVS = {
   prod: {
@@ -23,8 +42,18 @@ const ENVS = {
   },
   local: {
     EXPO_PUBLIC_API_BASE_URL: 'http://localhost:3000',
-    EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY:
-      'pk_test_YXdhaXRlZC1qZW5uZXQtOC5jbGVyay5hY2NvdW50cy5kZXYk',
+    EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: TEST_CLERK_KEY,
+  },
+  get lan() {
+    const ip = lanAddress();
+    if (!ip) {
+      console.error('Could not determine a LAN IP — are you connected to a network?');
+      process.exit(1);
+    }
+    return {
+      EXPO_PUBLIC_API_BASE_URL: `http://${ip}:3000`,
+      EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: TEST_CLERK_KEY,
+    };
   },
 };
 
@@ -42,6 +71,6 @@ const body = Object.entries(vals).map(([k, v]) => `${k}=${v}`).join('\n') + '\n'
 
 fs.writeFileSync(path.join(__dirname, '..', '.env'), header + body);
 
-console.log(`✔ apps/mobile/.env set to "${target}"`);
+console.log(`✔ .env set to "${target}"`);
 console.log(`  EXPO_PUBLIC_API_BASE_URL=${vals.EXPO_PUBLIC_API_BASE_URL}`);
 console.log(`  EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=${vals.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.slice(0, 12)}…`);

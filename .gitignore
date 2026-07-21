@@ -43,3 +43,12 @@ example
 # generated native folders
 /ios
 /android
+
+# Nested native build output. The /ios and /android rules above are root-anchored,
+# so they do NOT cover local Expo modules like modules/rx-recording/android/build.
+# Ignore build artifacts anywhere while KEEPING the module's src/ tracked.
+build/
+.gradle/
+.cxx/
+*.iml
+local.properties
