@@ -40,3 +40,40 @@ export async function uploadPatientVisitAudio(
     return null;
   }
 }
+
+/**
+ * Uploads the visit audio in the BACKGROUND after the visit already exists, then
+ * attaches the storage key to the visit via PATCH.
+ *
+ * This is intentionally decoupled from visit creation and summary generation:
+ * the plain-language summary is derived from the transcript (already captured
+ * client-side), so it must never wait on a slow S3 upload. The recording can be
+ * several MB; uploading it inline used to block the user on a "Saving…" spinner
+ * and — worse — pushed the follow-up `POST /visits` / summary calls behind a
+ * long upload, so a failed or slow upload meant no summary at all.
+ *
+ * Fire-and-forget: callers should NOT await this. It swallows all errors (the
+ * transcript is the source of truth; audio is only kept for re-transcription).
+ * `onDone` runs after a successful attach so the caller can refresh caches.
+ */
+export function uploadVisitAudioInBackground(
+  api: ApiClient,
+  fileUri: string,
+  profileId: number,
+  visitId: number,
+  onDone?: (key: string) => void,
+): void {
+  void (async () => {
+    try {
+      const key = await uploadPatientVisitAudio(api, fileUri, profileId);
+      if (!key) return;
+      await api(`/api/patient/visits/${visitId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ audioFileUrl: key }),
+      });
+      onDone?.(key);
+    } catch {
+      // Best-effort: a missing audio file never affects the summary.
+    }
+  })();
+}

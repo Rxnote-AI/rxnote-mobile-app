@@ -58,12 +58,16 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "env:prod": "node ./scripts/set-env.js prod",
+    "env:dev": "node ./scripts/set-env.js dev",
     "env:local": "node ./scripts/set-env.js local",
     "start:prod": "npm run env:prod && expo start --clear",
+    "start:dev": "npm run env:dev && expo start --clear",
     "start:local": "npm run env:local && expo start --clear",
     "android:prod": "npm run env:prod && expo run:android",
+    "android:dev": "npm run env:dev && expo run:android",
     "android:local": "npm run env:local && expo run:android",
     "ios:prod": "npm run env:prod && expo run:ios",
+    "ios:dev": "npm run env:dev && expo run:ios",
     "ios:local": "npm run env:local && expo run:ios"
   },
   "expo": {

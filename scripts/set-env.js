@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Switch .env between the production (rxnote.ai) and local backends.
+ * Switch .env between the production (rxnote.ai), dev, and local backends.
  *
  *   node ./scripts/set-env.js prod    # point the app at https://rxnote.ai
+ *   node ./scripts/set-env.js dev     # point the app at https://dev.rxnote.ai
  *   node ./scripts/set-env.js local   # point the app at http://localhost:3000
  *   node ./scripts/set-env.js lan     # point the app at http://<this-mac-lan-ip>:3000
  *
@@ -39,6 +40,10 @@ const ENVS = {
     // Production Clerk instance (clerk.rxnote.ai). Requires "Native applications"
     // enabled in the Clerk dashboard for mobile sign-in to work.
     EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_live_Y2xlcmsucnhub3RlLmFpJA',
+  },
+  dev: {
+    EXPO_PUBLIC_API_BASE_URL: 'https://dev.rxnote.ai',
+    EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: TEST_CLERK_KEY,
   },
   local: {
     EXPO_PUBLIC_API_BASE_URL: 'http://localhost:3000',

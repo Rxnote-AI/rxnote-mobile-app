@@ -140,6 +140,7 @@ cp .env.example .env   # set EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY + EXPO_PUBLIC_API
 
 ```bash
 node ./scripts/set-env.js prod    # https://rxnote.ai (production Clerk instance)
+node ./scripts/set-env.js dev     # https://dev.rxnote.ai (test Clerk instance)
 node ./scripts/set-env.js local   # http://localhost:3000
 node ./scripts/set-env.js lan     # http://<this-mac-lan-ip>:3000
 ```
@@ -149,6 +150,7 @@ node ./scripts/set-env.js lan     # http://<this-mac-lan-ip>:3000
 | Android emulator                                 | `local`        | Emulator and Mac share loopback over adb; needs `adb reverse` (below). |
 | Physical device, USB, same Wi-Fi as Mac          | `lan`          | No adb needed — device hits the Mac's LAN IP directly.                |
 | Physical device, USB, **different** Wi-Fi/subnet | `local`        | `lan` can't route between subnets; use `adb reverse` instead.         |
+| Shared dev backend                               | `dev`          | Public HTTPS URL — no local backend or port forwarding needed.        |
 | Production backend                               | `prod`         | No local backend or port forwarding needed.                           |
 
 `local` requires the device (real or emulated) to reach the Mac's `localhost`. Do this once
@@ -161,8 +163,8 @@ adb -s <serial> reverse tcp:8081 tcp:8081   # Metro bundler
 ```
 
 Corresponding npm shortcuts also exist and chain the env switch with the native build:
-`env:prod` / `env:local`, `start:prod` / `start:local`, `android:prod` / `android:local`,
-`ios:prod` / `ios:local`.
+`env:prod` / `env:dev` / `env:local`, `start:prod` / `start:dev` / `start:local`,
+`android:prod` / `android:dev` / `android:local`, `ios:prod` / `ios:dev` / `ios:local`.
 
 ## Running on a device or emulator
 
