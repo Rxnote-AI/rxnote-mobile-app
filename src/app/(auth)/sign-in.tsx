@@ -36,6 +36,12 @@ export default function SignInScreen() {
   const [error, setError] = useState<string | null>(null);
   /** Set when Clerk asks for an emailed code instead of accepting the password. */
   const [pendingCode, setPendingCode] = useState(false);
+  /** Set when the account has 2FA on and Clerk needs a second-factor code. */
+  const [secondFactorStrategy, setSecondFactorStrategy] = useState<
+    'phone_code' | 'totp' | 'email_code' | 'backup_code' | null
+  >(null);
+  /** Masked destination for the second-factor code, e.g. "+1 (•••) •••-1234". */
+  const [secondFactorHint, setSecondFactorHint] = useState<string | null>(null);
   const [code, setCode] = useState('');
 
   const onGoogle = useCallback(async () => {
@@ -93,7 +99,49 @@ export default function SignInScreen() {
       }
 
       if (attempt.status === 'needs_second_factor') {
-        setError('Two-factor authentication is on for this account. Sign in on the web to continue.');
+        const factors = attempt.supportedSecondFactors ?? [];
+        const phoneFactor = factors.find(
+          (f): f is typeof f & { phoneNumberId: string; safeIdentifier: string } =>
+            f.strategy === 'phone_code',
+        );
+        const totpFactor = factors.find((f) => f.strategy === 'totp');
+        const emailFactor = factors.find(
+          (f): f is typeof f & { emailAddressId: string; safeIdentifier: string } =>
+            f.strategy === 'email_code',
+        );
+        const backupCodeFactor = factors.find((f) => f.strategy === 'backup_code');
+
+        if (phoneFactor) {
+          await signIn.prepareSecondFactor({
+            strategy: 'phone_code',
+            phoneNumberId: phoneFactor.phoneNumberId,
+          });
+          setSecondFactorStrategy('phone_code');
+          setSecondFactorHint(phoneFactor.safeIdentifier);
+          return;
+        }
+        if (totpFactor) {
+          setSecondFactorStrategy('totp');
+          setSecondFactorHint(null);
+          return;
+        }
+        if (emailFactor) {
+          await signIn.prepareSecondFactor({
+            strategy: 'email_code',
+            emailAddressId: emailFactor.emailAddressId,
+          });
+          setSecondFactorStrategy('email_code');
+          setSecondFactorHint(emailFactor.safeIdentifier);
+          return;
+        }
+        if (backupCodeFactor) {
+          setSecondFactorStrategy('backup_code');
+          setSecondFactorHint(null);
+          return;
+        }
+
+        const offered = factors.map((f) => f.strategy).join(', ') || 'none';
+        setError(`This account's two-factor method (${offered}) isn't supported in the app yet.`);
         return;
       }
 
@@ -126,6 +174,43 @@ export default function SignInScreen() {
     }
   }, [isLoaded, signIn, code, setActive, router]);
 
+  /** Completes sign-in with a second-factor (2FA) code. */
+  const onVerifySecondFactor = useCallback(async () => {
+    if (!isLoaded || !secondFactorStrategy) return;
+    setBusy('email');
+    setError(null);
+    try {
+      const trimmed = code.trim();
+      const params =
+        secondFactorStrategy === 'phone_code'
+          ? { strategy: 'phone_code' as const, code: trimmed }
+          : secondFactorStrategy === 'totp'
+            ? { strategy: 'totp' as const, code: trimmed }
+            : secondFactorStrategy === 'email_code'
+              ? { strategy: 'email_code' as const, code: trimmed }
+              : { strategy: 'backup_code' as const, code: trimmed };
+      const attempt = await signIn.attemptSecondFactor(params);
+      if (attempt.status === 'complete') {
+        await setActive({ session: attempt.createdSessionId });
+        router.replace('/');
+      } else {
+        setError(`Could not complete sign-in (status: ${attempt.status}).`);
+      }
+    } catch (e: unknown) {
+      setError(readClerkError(e, 'That code did not work.'));
+    } finally {
+      setBusy(null);
+    }
+  }, [isLoaded, signIn, secondFactorStrategy, code, setActive, router]);
+
+  const resetToCredentials = useCallback(() => {
+    setPendingCode(false);
+    setSecondFactorStrategy(null);
+    setSecondFactorHint(null);
+    setCode('');
+    setError(null);
+  }, []);
+
   return (
     <SafeAreaView className="flex-1 bg-rx-bg">
       <KeyboardAvoidingView className="flex-1" behavior="padding" keyboardVerticalOffset={0}>
@@ -157,7 +242,22 @@ export default function SignInScreen() {
 
           <Divider />
 
-          {pendingCode ? (
+          {secondFactorStrategy ? (
+            <>
+              <Text weight="medium" className="mb-4 text-[13.5px] leading-5 text-rx-muted">
+                {secondFactorHintText(secondFactorStrategy, secondFactorHint)}
+              </Text>
+              <AuthField
+                label={secondFactorStrategy === 'backup_code' ? 'BACKUP CODE' : 'VERIFICATION CODE'}
+                value={code}
+                onChangeText={setCode}
+                placeholder={secondFactorStrategy === 'backup_code' ? 'xxxxx-xxxxx' : '123456'}
+                keyboardType={secondFactorStrategy === 'backup_code' ? 'default' : 'number-pad'}
+                autoCapitalize="none"
+                autoComplete="one-time-code"
+              />
+            </>
+          ) : pendingCode ? (
             <>
               <Text weight="medium" className="mb-4 text-[13.5px] leading-5 text-rx-muted">
                 We emailed a 6-digit code to {email}. Enter it to finish signing in.
@@ -203,26 +303,19 @@ export default function SignInScreen() {
             className="mt-2 rounded-[16px]"
             label={
               busy === 'email'
-                ? pendingCode
+                ? secondFactorStrategy || pendingCode
                   ? 'Verifying…'
                   : 'Signing in…'
-                : pendingCode
+                : secondFactorStrategy || pendingCode
                   ? 'Verify & continue'
                   : 'Sign in'
             }
-            disabled={busy !== null || (pendingCode && code.trim().length < 4)}
-            onPress={pendingCode ? onVerifyCode : onEmail}
+            disabled={busy !== null || ((secondFactorStrategy !== null || pendingCode) && code.trim().length < 4)}
+            onPress={secondFactorStrategy ? onVerifySecondFactor : pendingCode ? onVerifyCode : onEmail}
           />
 
-          {pendingCode ? (
-            <Pressable
-              onPress={() => {
-                setPendingCode(false);
-                setCode('');
-                setError(null);
-              }}
-              className="mt-3 items-center active:opacity-70"
-            >
+          {secondFactorStrategy || pendingCode ? (
+            <Pressable onPress={resetToCredentials} className="mt-3 items-center active:opacity-70">
               <Text weight="bold" className="text-[13px] text-rx-muted">
                 Use a different account
               </Text>
@@ -274,6 +367,22 @@ function Divider() {
       <View className="h-px flex-1 bg-rx-line" />
     </View>
   );
+}
+
+function secondFactorHintText(
+  strategy: 'phone_code' | 'totp' | 'email_code' | 'backup_code',
+  hint: string | null,
+): string {
+  switch (strategy) {
+    case 'phone_code':
+      return `We texted a code to ${hint ?? 'your phone'}. Enter it to finish signing in.`;
+    case 'totp':
+      return 'Enter the 6-digit code from your authenticator app.';
+    case 'email_code':
+      return `We emailed a verification code to ${hint ?? 'your email'}. Enter it to finish signing in.`;
+    case 'backup_code':
+      return 'Enter one of your saved backup codes.';
+  }
 }
 
 /** Pull the human-readable message out of a Clerk error, with a fallback. */
