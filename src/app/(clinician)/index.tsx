@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/controls';
 import { ProcessingCard } from '@/components/ui/processing-card';
 import { Text } from '@/components/ui/text';
+import { useNotifications } from '@/features/notifications/use-notifications';
 import type { Patient } from '@/features/patients/types';
 import { usePatients } from '@/features/patients/use-patients';
 import { useProcessingStore, useProcessingVisitStatus } from '@/hooks/use-processing-visits';
@@ -133,6 +134,8 @@ export default function HomeScreen() {
   const { user } = useUser();
   // Single query powers the greeting list AND the stats — no per-patient fan-out.
   const { data, isLoading, refetch, isRefetching } = usePatients();
+  const { data: notifications } = useNotifications();
+  const unreadCount = notifications?.unreadCount ?? 0;
 
   const allPatients = useMemo(() => [...(data?.patients ?? [])].sort(byRecentVisit), [data]);
   const recent = useMemo(() => {
@@ -167,9 +170,16 @@ export default function HomeScreen() {
           </View>
           <Pressable
             accessibilityLabel="Notifications"
+            onPress={() => router.push('/notifications')}
             className="h-11 w-11 items-center justify-center rounded-full border border-rx-line bg-rx-surface active:opacity-80"
           >
             <Ionicons name="notifications-outline" size={22} color={rx.ink} />
+            {unreadCount > 0 ? (
+              <View
+                className="absolute right-2 top-2 h-[9px] w-[9px] rounded-full bg-rx-accent"
+                style={{ borderWidth: 1.5, borderColor: rx.surface }}
+              />
+            ) : null}
           </Pressable>
         </View>
 

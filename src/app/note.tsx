@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
@@ -33,25 +35,95 @@ const STATUS_LABELS: Record<ProcessingStatus, string> = {
 };
 
 // Client-side phases (before the server reports real progress) so the bar keeps
-// moving through save → upload → processing instead of freezing at one value.
+// moving through save → processing instead of freezing at one value. Audio upload
+// now runs fully in the background (see use-background-save.ts) so it's no longer
+// a step the user waits through at all.
 const CLIENT_STEP_LABELS: Record<SaveStep, string> = {
   saving: 'Saving transcript…',
-  uploading: 'Uploading audio…',
   processing: 'Starting processing…',
 };
 const CLIENT_STEP_PROGRESS: Record<SaveStep, number> = {
-  saving: 8,
-  uploading: 22,
+  saving: 12,
   processing: 40,
 };
 
+/**
+ * Determinate fill + a translucent highlight that continuously sweeps across it.
+ * Real progress can sit at the same number for a while between server polls (or
+ * the whole client-side phase) — the sweep is what keeps this from reading as stuck.
+ */
 function ProgressBar({ progress }: { progress: number }) {
+  const sweep = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(sweep, {
+        toValue: 1,
+        duration: 1100,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [sweep]);
+
+  const translateX = sweep.interpolate({ inputRange: [0, 1], outputRange: [-80, 260] });
+
   return (
     <View className="mt-4 h-[6px] w-full overflow-hidden rounded-full bg-rx-hairline">
       <View
-        className="h-full rounded-full bg-rx-accent"
+        className="h-full overflow-hidden rounded-full bg-rx-accent"
         style={{ width: `${Math.max(progress, 5)}%` }}
+      >
+        <Animated.View
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            width: 60,
+            backgroundColor: 'rgba(255,255,255,0.55)',
+            transform: [{ translateX }],
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+/** Pulsing concentric rings — signals "still alive" independent of real progress ticks. */
+function PulsingRings() {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const outerScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] });
+  const outerOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+  const midScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
+
+  return (
+    <View className="mb-6 h-[100px] w-[100px] items-center justify-center">
+      <Animated.View
+        style={{ transform: [{ scale: outerScale }], opacity: outerOpacity }}
+        className="absolute h-[100px] w-[100px] items-center justify-center rounded-full border-[3px] border-rx-accent/20"
       />
+      <Animated.View
+        style={{ transform: [{ scale: midScale }] }}
+        className="h-[72px] w-[72px] items-center justify-center rounded-full border-[3px] border-rx-accent/40"
+      >
+        <View className="h-[48px] w-[48px] items-center justify-center rounded-full bg-rx-accent">
+          <Ionicons name="document-text" size={22} color="#fff" />
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -197,14 +269,7 @@ export default function NoteScreen() {
         </View>
 
         <View className="flex-1 items-center justify-center px-10">
-          {/* Animated rings */}
-          <View className="mb-6 h-[100px] w-[100px] items-center justify-center rounded-full border-[3px] border-rx-accent/20">
-            <View className="h-[72px] w-[72px] items-center justify-center rounded-full border-[3px] border-rx-accent/40">
-              <View className="h-[48px] w-[48px] items-center justify-center rounded-full bg-rx-accent">
-                <Ionicons name="document-text" size={22} color="#fff" />
-              </View>
-            </View>
-          </View>
+          <PulsingRings />
 
           <Text weight="extrabold" className="mb-2 text-center text-[20px] text-rx-ink">
             {progressLabel}

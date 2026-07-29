@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -82,6 +82,15 @@ export default function NewScribeScreen() {
   const hasSelection = mode === 'existing' ? selected !== null : name.trim().length > 0 && phone.trim().length > 0 && !!sex;
   const canStart = hasSelection && templateId !== null;
 
+  // Once a patient is picked (or new-patient details are complete), the language +
+  // template section appears below — auto-scroll to it once so it isn't missed,
+  // instead of relying on the user to notice it and scroll manually.
+  const scrollRef = useRef<ScrollView>(null);
+  const hasScrolledForSelection = useRef(false);
+  useEffect(() => {
+    if (!hasSelection) hasScrolledForSelection.current = false;
+  }, [hasSelection]);
+
   const firstName = (selected?.name ?? name).trim().split(' ')[0];
   const startLabel =
     mode === 'existing'
@@ -138,6 +147,7 @@ export default function NewScribeScreen() {
         keyboardVerticalOffset={insets.top + 4}
       >
       <ScrollView
+        ref={scrollRef}
         className="flex-1"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -155,7 +165,7 @@ export default function NewScribeScreen() {
 
         {mode === 'existing' ? (
           <>
-            <View className="mb-3 flex-row items-center gap-[9px] rounded-[14px] border border-rx-line2 bg-rx-surface px-[14px] py-[11px]">
+            <View className="mb-3 flex-row items-center gap-[9px] rounded-[14px] border border-rx-line2 bg-rx-surface px-[14px] py-[8px]">
               <Ionicons name="search" size={17} color="#B7B7B2" />
               <TextInput
                 value={inputValue}
@@ -266,7 +276,17 @@ export default function NewScribeScreen() {
         )}
 
         {hasSelection ? (
-          <View className="mt-[22px]">
+          <View
+            className="mt-[22px]"
+            onLayout={(e) => {
+              if (hasScrolledForSelection.current) return;
+              hasScrolledForSelection.current = true;
+              const y = e.nativeEvent.layout.y;
+              requestAnimationFrame(() => {
+                scrollRef.current?.scrollTo({ y: Math.max(y - 12, 0), animated: true });
+              });
+            }}
+          >
             <SectionTitle className="mb-1">Visit language</SectionTitle>
             <Text weight="medium" className="mb-[11px] text-[12px] text-rx-muted">
               Set the language for this visit

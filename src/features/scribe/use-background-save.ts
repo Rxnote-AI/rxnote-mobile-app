@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiClient } from '@/lib/api-client';
 import { useProcessingStore } from '@/hooks/use-processing-visits';
-import { uploadAudioFile } from './upload-audio';
+import { uploadVisitAudioInBackground } from './upload-audio';
 
-export type SaveStep = 'saving' | 'uploading' | 'processing';
+export type SaveStep = 'saving' | 'processing';
 
 interface BackgroundSaveInput {
   patientId: number;
@@ -44,11 +44,18 @@ export interface BackgroundSaveResult {
 /**
  * Production-ready save that hands off to the server's Inngest pipeline:
  *   1. POST /api/save-transcript → creates the visit row immediately (status: pending)
- *   2. Upload audio to S3 (best-effort, non-blocking for the visit row)
- *   3. POST /api/process-audio-background → triggers Inngest SOAP generation
+ *   2. POST /api/process-audio-background → triggers Inngest SOAP generation
+ *   3. Upload audio to S3 in the BACKGROUND, then PUT the key onto the visit
+ *
+ * Step 3 deliberately does NOT block step 2: mobile always sends the on-device Soniox
+ * transcript as `preTranscribedText`, so the server skips its own transcription and
+ * never needs the audio file to start generating the note. A 1-hour visit's recording
+ * can take a while to upload on a slow connection — awaiting it before even starting
+ * generation was pure dead time, so it now runs concurrently and attaches whenever it
+ * finishes (or silently doesn't, if it fails — the transcript is the source of truth).
  *
  * If the app is killed after step 1, the visit + transcript are already persisted.
- * If killed after step 3, server completes SOAP generation in the background.
+ * If killed after step 2, server completes SOAP generation in the background.
  */
 export function useBackgroundSave() {
   const api = useApiClient();
@@ -73,22 +80,14 @@ export function useBackgroundSave() {
 
       // Register the processing visit the moment the row exists — from inside the
       // mutation (a global store + a promise that keeps running) so it shows on the
-      // homepage instantly and survives the user dismissing the note screen mid-save,
-      // even before the (slow) audio upload below finishes.
+      // homepage instantly and survives the user dismissing the note screen mid-save.
       useProcessingStore.getState().add({ visitId, patientName, patientId });
-      // Surface the id NOW so the note screen starts polling real progress during
-      // the upload + processing, instead of showing a frozen 5%.
+      // Surface the id NOW so the note screen starts polling real progress immediately.
       onVisitCreated?.(visitId);
 
-      // Step 2: Upload audio to S3 (best-effort — never blocks processing).
-      let audioFileUrl: string | null = null;
-      if (audioUri) {
-        onStep?.('uploading');
-        audioFileUrl = await uploadAudioFile(api, audioUri, patientId);
-      }
-
-      // Step 3: Kick off background processing (Inngest pipeline).
-      // Server handles SOAP generation, summary, ICD-10 coding even if app closes.
+      // Step 2: Kick off background processing right away (Inngest pipeline) — a
+      // placeholder audioFileUrl stands in until the real upload (step 3) attaches one;
+      // the server doesn't need it since preTranscribedText is already supplied.
       onStep?.('processing');
       const processed = await api<ProcessAudioResponse>('/api/process-audio-background', {
         method: 'POST',
@@ -96,7 +95,7 @@ export function useBackgroundSave() {
           visitId,
           patientId,
           doctorId,
-          audioFileUrl: audioFileUrl || `mobile-recording-${visitId}`,
+          audioFileUrl: `mobile-recording-${visitId}`,
           language,
           templateId,
           specialty,
@@ -104,6 +103,12 @@ export function useBackgroundSave() {
           translateToEnglish: language !== 'en',
         }),
       });
+
+      // Step 3: Upload audio in the background — never awaited, never blocks generation,
+      // and isn't a client-side "step" at all anymore since it's fully concurrent.
+      if (audioUri) {
+        uploadVisitAudioInBackground(api, audioUri, patientId, visitId);
+      }
 
       // Invalidate from inside the mutation (not onSuccess) so the homepage's
       // patients / Recent Visits list refreshes even if the note screen was

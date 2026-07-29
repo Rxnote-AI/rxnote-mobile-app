@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { rx } from '@/theme/rx';
 
-type IconBase = 'home' | 'chatbubble' | 'settings';
+type IconBase = 'home' | 'chatbubble' | 'pulse' | 'settings';
 
 function TabIcon({ base, color, focused }: { base: IconBase; color: string; focused: boolean }) {
   const name = (focused ? base : `${base}-outline`) as keyof typeof Ionicons.glyphMap;
@@ -63,6 +63,15 @@ export default function ClinicianLayout() {
           title: 'Chat',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon base="chatbubble" color={color as string} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="care-journey"
+        options={{
+          title: 'Care Journey',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon base="pulse" color={color as string} focused={focused} />
           ),
         }}
       />
