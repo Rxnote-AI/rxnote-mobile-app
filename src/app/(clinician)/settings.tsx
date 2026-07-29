@@ -13,7 +13,6 @@ import { rx } from '@/theme/rx';
 type IconName = keyof typeof Ionicons.glyphMap;
 
 const CLINICAL: { icon: IconName; label: string; value: string }[] = [
-  { icon: 'language-outline', label: 'App language', value: 'English' },
   { icon: 'document-text-outline', label: 'Default note template', value: 'SOAP' },
   { icon: 'medkit-outline', label: 'Specialty', value: 'General' },
   { icon: 'mic-outline', label: 'Default transcription language', value: 'English' },

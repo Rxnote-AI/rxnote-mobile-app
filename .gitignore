@@ -17,6 +17,10 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.keystore
+
+# Release signing — the keystore + its passwords must NEVER be committed.
+/keystores/
 
 # Metro
 .metro-health-check*
