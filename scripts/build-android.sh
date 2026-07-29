@@ -22,6 +22,8 @@
 #                              tends to break, and only your testers would see it.
 #   --install                  adb install to the connected device afterwards
 #   --upload                   push to Diawi and print an install link + QR
+#   --password=<pw>            password-protect the Diawi link (implies --upload).
+#                              A Diawi link is otherwise an unlisted PUBLIC URL.
 #   --no-prebuild              skip `expo prebuild` (faster; only safe if you have NOT
 #                              touched app.json, plugins/, or any native dependency)
 #
@@ -34,7 +36,7 @@ cd "$(dirname "$0")/.."
 
 TARGET="share"
 ENV_TARGET="prod"
-MINIFY=0; INSTALL=0; UPLOAD=0; PREBUILD=1
+MINIFY=0; INSTALL=0; UPLOAD=0; PREBUILD=1; PASSWORD=""
 
 for a in "$@"; do
   case "$a" in
@@ -43,8 +45,9 @@ for a in "$@"; do
     --minify)      MINIFY=1 ;;
     --install)     INSTALL=1 ;;
     --upload)      UPLOAD=1 ;;
+    --password=*)  PASSWORD="${a#*=}"; UPLOAD=1 ;;
     --no-prebuild) PREBUILD=0 ;;
-    -h|--help)     sed -n '2,31p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,33p' "$0"; exit 0 ;;
     *) echo "✗ unknown argument: $a  (try --help)"; exit 1 ;;
   esac
 done
@@ -174,7 +177,14 @@ if [ "$INSTALL" = 1 ]; then
 fi
 
 if [ "$UPLOAD" = 1 ]; then
-  # Diawi's free tier caps around 50 MB — 'share' fits, 'universal' will not.
-  echo "▸ Uploading to Diawi…"
-  ./scripts/diawi-upload.sh "$OUT" "RxNote ${VERSION} (${ENV_TARGET}/${TARGET}, ${SHA})"
+  if [ "$EXT" = "aab" ]; then
+    echo "ℹ --upload skipped: Diawi serves installable APK/IPA, not App Bundles."
+    echo "  Use Firebase App Distribution for .aab, or build 'share'."
+  else
+    UPLOAD_FLAGS=()
+    [ -n "$PASSWORD" ] && UPLOAD_FLAGS+=("--password=${PASSWORD}")
+    ./scripts/diawi-upload.sh "$OUT" \
+      "RxNote ${VERSION} vc${ANDROID_VERSION_CODE} (${ENV_TARGET}/${TARGET}, ${SHA}${DIRTY})" \
+      "${UPLOAD_FLAGS[@]+"${UPLOAD_FLAGS[@]}"}"
+  fi
 fi
