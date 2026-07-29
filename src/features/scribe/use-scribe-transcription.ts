@@ -130,10 +130,16 @@ interface SonioxMessage {
 
 export interface ScribeTranscriptionConfig {
   language: string;
+  /**
+   * Optional extra spoken-language hints for code-switched/mixed-language speech
+   * (Soniox `language_hints` takes several). Falls back to `[language]` when omitted.
+   */
+  languages?: string[];
   getApiKey: () => Promise<string>;
 }
 
-export function useScribeTranscription({ language, getApiKey }: ScribeTranscriptionConfig) {
+export function useScribeTranscription({ language, languages, getApiKey }: ScribeTranscriptionConfig) {
+  const hints = languages && languages.length > 0 ? languages : [language];
   const [transcript, setTranscript] = useState('');
   const [interim, setInterim] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -187,7 +193,7 @@ export function useScribeTranscription({ language, getApiKey }: ScribeTranscript
   // re-initialising the native AudioRecord (which races its read thread and aborts).
   const openSocket = useCallback(
     (apiKey: string) => {
-      const translate = language !== 'en' && !language.startsWith('en');
+      const translate = hints.some((l) => l !== 'en' && !l.startsWith('en'));
       const ws = new WebSocket(SONIOX_WS_URL);
       wsRef.current = ws;
       ws.binaryType = 'arraybuffer';
@@ -200,7 +206,7 @@ export function useScribeTranscription({ language, getApiKey }: ScribeTranscript
             audio_format: 's16le',
             sample_rate: SAMPLE_RATE,
             num_channels: 1,
-            language_hints: [language],
+            language_hints: hints,
             enable_endpoint_detection: true,
             enable_speaker_diarization: true,
             context: {
@@ -217,7 +223,8 @@ export function useScribeTranscription({ language, getApiKey }: ScribeTranscript
       ws.onerror = () => setError('Transcription connection error.');
       ws.onclose = () => setIsConnected(false);
     },
-    [language, handleMessage],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hints.join(','), handleMessage],
   );
 
   const start = useCallback(async () => {
@@ -308,6 +315,28 @@ export function useScribeTranscription({ language, getApiKey }: ScribeTranscript
     }
   }, [getApiKey, openSocket]);
 
+  // Force-close and reopen the socket with whatever hints `openSocket` currently closes
+  // over — used when the spoken-language selection changes mid-session, since hints are
+  // only sent at socket-open time. Leaves play/pause state untouched: while paused, audio
+  // still isn't forwarded (gated by `recordingRef`), so this is safe to call any time.
+  const reconnectSocket = useCallback(async () => {
+    const ws = wsRef.current;
+    if (ws) {
+      try {
+        ws.close();
+      } catch {
+        // ignore
+      }
+    }
+    wsRef.current = null;
+    try {
+      const apiKey = await getApiKey();
+      openSocket(apiKey);
+    } catch (e) {
+      setError((e as Error)?.message ?? 'Could not reconnect transcription.');
+    }
+  }, [getApiKey, openSocket]);
+
   const stop = useCallback(async () => {
     recordingRef.current = false;
     try {
@@ -371,5 +400,6 @@ export function useScribeTranscription({ language, getApiKey }: ScribeTranscript
     pause,
     resume,
     stop,
+    reconnectSocket,
   };
 }

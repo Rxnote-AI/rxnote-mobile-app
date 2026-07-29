@@ -6,7 +6,12 @@ Expo SDK 57 · React 19 · RN 0.86 · Expo Router · TypeScript · NativeWind v4
 For SDK APIs, use the versioned docs: https://docs.expo.dev/versions/v57.0.0/ (or the Expo MCP).
 
 ## Rules
-- **English-only.** No i18n / next-intl / Soniox language hints or translation here.
+- **UI is English-only.** No i18n / next-intl for the app's interface strings.
+- **Spoken/dictation language is configurable per recording**, distinct from the UI language: Soniox
+  `language_hints` + one-way translation to English are used by the visit scribe flow
+  (`new-scribe.tsx` / `scribe-session.tsx`) and by Care Journey recording, which lets a clinician mix
+  up to 3 languages at once for code-switched speech (`src/features/scribe/languages.ts` is the
+  shared language list).
 - **Soniox is the only STT provider.**
 - **Isolated from web:** this app has its own `node_modules` + `package-lock.json` (npm).
   Do NOT add it to the root pnpm workspace or touch root `package.json` — that would risk the

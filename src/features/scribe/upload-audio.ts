@@ -46,3 +46,35 @@ export async function uploadAudioFile(
     return null;
   }
 }
+
+/**
+ * Uploads the visit audio in the BACKGROUND after SOAP generation has already been
+ * kicked off, then attaches the storage key to the visit via `PUT /api/visits/:id`.
+ *
+ * Decoupled from note generation on purpose: mobile always sends the on-device Soniox
+ * transcript as `preTranscribedText`, so the server skips its own transcription step
+ * and never needs the audio file to start generating the SOAP note. Awaiting a
+ * multi-MB upload (a 1-hour visit) before even starting generation was pure dead time.
+ *
+ * Fire-and-forget: callers should NOT await this. It swallows all errors — the
+ * transcript is the source of truth; audio is only kept for playback/re-transcription.
+ */
+export function uploadVisitAudioInBackground(
+  api: ApiClient,
+  fileUri: string,
+  patientId: number,
+  visitId: number,
+): void {
+  void (async () => {
+    try {
+      const key = await uploadAudioFile(api, fileUri, patientId);
+      if (!key) return;
+      await api(`/api/visits/${visitId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ audioFileUrl: key }),
+      });
+    } catch {
+      // Best-effort: a missing audio file never affects the generated note.
+    }
+  })();
+}

@@ -155,7 +155,7 @@ export default function NewScribeScreen() {
 
         {mode === 'existing' ? (
           <>
-            <View className="mb-3 flex-row items-center gap-[9px] rounded-[14px] border border-rx-line2 bg-rx-surface px-[14px] py-[11px]">
+            <View className="mb-3 flex-row items-center gap-[9px] rounded-[14px] border border-rx-line2 bg-rx-surface px-[14px] py-[8px]">
               <Ionicons name="search" size={17} color="#B7B7B2" />
               <TextInput
                 value={inputValue}

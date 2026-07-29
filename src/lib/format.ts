@@ -21,6 +21,23 @@ export function relativeDay(value: string | null | undefined): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+/** Compact "11d ago" / "3h ago" / "Just now" — for notification timestamps. */
+export function timeAgo(value: string | null | undefined): string {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const diffMs = Date.now() - d.getTime();
+  const minute = 60_000;
+  const hour = 3_600_000;
+  const day = 86_400_000;
+  if (diffMs < minute) return 'Just now';
+  if (diffMs < hour) return `${Math.floor(diffMs / minute)}m ago`;
+  if (diffMs < day) return `${Math.floor(diffMs / hour)}h ago`;
+  const days = Math.floor(diffMs / day);
+  if (days < 30) return `${days}d ago`;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 /** Compact patient meta line, e.g. "32 y · Male". */
 export function patientMeta(age: number | null | undefined, sex: string | null | undefined): string {
   const parts: string[] = [];
