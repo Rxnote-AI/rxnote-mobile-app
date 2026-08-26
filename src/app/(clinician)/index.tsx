@@ -1,5 +1,6 @@
 import { useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
@@ -65,6 +66,7 @@ function StatCard({
 
 function ProcessingVisitRow({ visitId, patientName, patientId }: { visitId: number; patientName: string; patientId: number }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data } = useProcessingVisitStatus(visitId);
   const remove = useProcessingStore((s) => s.remove);
   const status = (data?.status ?? 'processing') as import('@/components/ui/processing-card').ProcessingCardStatus;
@@ -74,14 +76,19 @@ function ProcessingVisitRow({ visitId, patientName, patientId }: { visitId: numb
     setTimeout(() => remove(visitId), 5000);
   }
 
+  const handlePress = () => {
+    // Force refetch patient visits to ensure SOAP note data is fresh
+    queryClient.invalidateQueries({ queryKey: ['patient-visits', String(patientId)] });
+    queryClient.invalidateQueries({ queryKey: ['patients'] });
+    router.push({ pathname: '/patient/[id]', params: { id: String(patientId), name: patientName } });
+  };
+
   return (
     <ProcessingCard
       patientName={patientName}
       status={status}
       progress={progress}
-      onPress={() =>
-        router.push({ pathname: '/patient/[id]', params: { id: String(patientId), name: patientName } })
-      }
+      onPress={handlePress}
     />
   );
 }

@@ -63,7 +63,8 @@ export function ProcessingCard({
 
   return (
     <Pressable
-      onPress={onPress}
+      onPress={isActive ? undefined : onPress}
+      disabled={isActive}
       className={`flex-row items-center gap-3 rounded-[16px] border px-4 py-[14px] active:opacity-80 ${
         isComplete
           ? 'border-green-200 bg-green-50'
@@ -84,7 +85,7 @@ export function ProcessingCard({
           {patientName}
         </Text>
         <Text weight="medium" className="text-[11.5px] text-rx-muted">
-          {LABELS[status] ?? status}
+          {isComplete ? 'Tap to view' : (LABELS[status] ?? status)}
         </Text>
       </View>
       {isActive ? (
